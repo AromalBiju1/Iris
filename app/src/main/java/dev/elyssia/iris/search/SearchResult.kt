@@ -11,14 +11,42 @@ data class SearchResult(
 
 data class SearchOutcome(val engine: Engine, val results: List<SearchResult>)
 
-class ProviderFailure(
-    val providerEngine: Engine,
-    cause: Throwable,
-) : Exception("provider ${providerEngine.name} failed: ${cause.message}", cause)
+/** One provider's non-productive attempt, with the empty-vs-failure distinction (§5.2). */
+data class RouterFailure(
+    val engine: Engine,
+    val isEmpty: Boolean = false,
+    val cause: Throwable?,
+) {
+    fun message(): String = if (isEmpty) {
+        "${engine.name} responded with zero results"
+    } else {
+        "provider ${engine.name} failed: ${cause?.message ?: cause?.javaClass?.simpleName ?: "unknown"}"
+    }
+}
+
+/**
+ * What a provider throws inside search(); the router converts it to a
+ * RouterFailure, preserving the empty-vs-outage distinction (§5.2).
+ */
+class ProviderFailureException(
+    val engine: Engine,
+    val isEmpty: Boolean = false,
+    override val cause: Throwable? = null,
+) : Exception(
+    if (isEmpty) {
+        "${engine.name} responded with zero results"
+    } else {
+        "provider ${engine.name} failed: ${cause?.message ?: cause?.javaClass?.simpleName ?: "unknown"}"
+    }
+)
 
 class NoResultsException(
-    val errors: List<Throwable>,
+    val failures: List<RouterFailure>,
+    val isGenuineEmpty: Boolean,
 ) : Exception(
-    "all providers failed (${errors.size} errors): " +
-        errors.joinToString(" | ") { "${it::class.simpleName}: ${it.message}" }
+    when {
+        failures.isEmpty() -> "no providers reachable"
+        isGenuineEmpty -> "no results found"
+        else -> failures.joinToString(" | ") { it.message() }
+    }
 )

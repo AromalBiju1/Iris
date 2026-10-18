@@ -28,6 +28,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -38,9 +40,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -81,7 +85,14 @@ fun SearchScreen(
     uiState: SearchUiState,
     onQuerySubmit: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenPrivate: () -> Unit = {},
+    onOpenSettings: () -> Unit = {},
+    onOpenLibrary: () -> Unit = {},
+    isOnline: Boolean = true,
+    onBackToIdle: () -> Unit = {},
 ) {
+    // system back collapses results/suggestions to home instead of leaving the app
+    if (uiState is SearchUiState.Results) BackHandler { onBackToIdle() }
     var text by remember { mutableStateOf("") }
     var suggester by remember { mutableStateOf<SuggestClient?>(null) }
     var suggestions by remember { mutableStateOf<List<String>>(emptyList()) }
@@ -128,6 +139,13 @@ fun SearchScreen(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                 )
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onOpenLibrary) {
+                    Icon(Icons.Filled.Star, "collections (saved pages)")
+                }
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Filled.Settings, "settings")
+                }
             }
 
             // ---- centered search ----
@@ -193,6 +211,19 @@ fun SearchScreen(
 
             when (val state = uiState) {
                 is SearchUiState.Idle -> {
+                    if (!isOnline) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        ) {
+                            Text(
+                                "No internet — search needs a connection, but saved pages still work.",
+                                Modifier.padding(12.dp),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                     // ---- collections ----
                     if (bookmarks.isNotEmpty()) {
                         Text(
@@ -211,7 +242,9 @@ fun SearchScreen(
                         }
                         Spacer(Modifier.height(16.dp))
                     }
-                    Spacer(Modifier.height(28.dp))
+                    Spacer(Modifier.height(16.dp))
+                    OutlinedButton(onClick = onOpenPrivate) { Text("Open private tab") }
+                    Spacer(Modifier.height(12.dp))
                     Image(
                         painter = painterResource(R.drawable.logo),
                         contentDescription = "Iris",
@@ -233,6 +266,33 @@ fun SearchScreen(
                         state.message,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    TextButton(onClick = { onQuerySubmit(state.query) }) { Text("Retry") }
+                }
+                is SearchUiState.Empty -> Column(Modifier.padding(vertical = 8.dp)) {
+                    Text(
+                        "No results found for \"${state.query}\".",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Try different words or fewer filters.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                is SearchUiState.Offline -> Column(Modifier.padding(vertical = 8.dp)) {
+                    Text(
+                        "Search needs internet",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "\"${state.query}\" couldn't run because the device looks offline. " +
+                            "Collections and saved pages still work.",
+                        style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.height(4.dp))
                     TextButton(onClick = { onQuerySubmit(state.query) }) { Text("Retry") }

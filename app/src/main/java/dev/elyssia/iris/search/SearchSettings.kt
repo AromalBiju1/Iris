@@ -10,7 +10,12 @@ class SearchSettings(private val store: LocalStore) {
 
     fun setCandidateUrls(urls: List<String>) = store.setSetting("searx_urls", urls.joinToString("\n"))
 
+    /** Spec §5.5 fallback policy — DDG fallback is user-controlled, default ON. */
+    fun ddgFallbackEnabled(): Boolean = store.getSetting(KEY_DDGS)?.let { it == "true" } ?: true
+    fun setDdgFallbackEnabled(enabled: Boolean) = store.setSetting(KEY_DDGS, enabled.toString())
+
     companion object {
+        const val KEY_DDGS = "ddg_fallback"
         val DEFAULT_CANDIDATES = listOf(
             "http://100.110.99.98:8888",
             "http://192.168.31.65:8888",

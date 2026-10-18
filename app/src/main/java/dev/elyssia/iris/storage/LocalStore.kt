@@ -5,13 +5,37 @@ import android.database.sqlite.SQLiteDatabase
 
 data class HistoryEntry(val url: String, val title: String, val at: Long)
 data class Bookmark(val url: String, val title: String)
+data class TabSessionRow(val id: Long, val url: String, val title: String)
 
 class LocalStore(context: Context) {
     val db: SQLiteDatabase = context.openOrCreateDatabase("iris.db", Context.MODE_PRIVATE, null).also {
         it.execSQL("CREATE TABLE IF NOT EXISTS history (url TEXT PRIMARY KEY, title TEXT, at INTEGER)")
         it.execSQL("CREATE TABLE IF NOT EXISTS bookmarks (url TEXT PRIMARY KEY, title TEXT)")
         it.execSQL("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
+        it.execSQL("CREATE TABLE IF NOT EXISTS tabs (id INTEGER PRIMARY KEY, url TEXT, title TEXT, pos INTEGER)")
     }
+
+    fun saveTabs(tabs: List<Triple<Long, String, String>>) {
+        db.execSQL("DELETE FROM tabs")
+        tabs.forEachIndexed { pos, t ->
+            db.execSQL(
+                "INSERT OR REPLACE INTO tabs (id, url, title, pos) VALUES (?, ?, ?, ?)",
+                arrayOf(t.first, t.second, t.third, pos),
+            )
+        }
+    }
+
+    fun loadTabs(): List<TabSessionRow> {
+        val out = mutableListOf<TabSessionRow>()
+        db.rawQuery("SELECT id, url, title FROM tabs ORDER BY pos", null).use { c ->
+            while (c.moveToNext()) {
+                out += TabSessionRow(c.getLong(0), c.getString(1), c.getString(2))
+            }
+        }
+        return out
+    }
+
+    fun clearTabSession() = db.execSQL("DELETE FROM tabs")
 
     fun addHistory(url: String, title: String, at: Long = System.currentTimeMillis()) {
         db.execSQL("INSERT OR REPLACE INTO history (url, title, at) VALUES (?, ?, ?)", arrayOf(url, title, at))

@@ -26,14 +26,14 @@ class DdgLiteProvider(private val client: OkHttpClient) : SearchProvider {
             searchClient.newCall(Request.Builder().url(http).header("User-Agent", UA).build())
                 .execute().use { r ->
                     if (!r.isSuccessful) {
-                        throw ProviderFailure(engine, IllegalStateException("HTTP ${r.code}"))
+                        throw ProviderFailureException(engine, cause = IllegalStateException("HTTP ${r.code}"))
                     }
                     val body = r.body?.string()
-                        ?: throw ProviderFailure(engine, IllegalStateException("empty body"))
+                        ?: throw ProviderFailureException(engine, cause = IllegalStateException("empty body"))
                     DdgLiteParser.parse(body, limit)
                 }
         } catch (e: Exception) {
-            throw ProviderFailure(engine, e)
+            throw ProviderFailureException(engine, cause = e)
         }
     }
 

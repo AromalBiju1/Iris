@@ -37,17 +37,17 @@ class SearXngProvider(
         val searchClient = client.newBuilder()
             .readTimeout(4_000L, TimeUnit.MILLISECONDS)
             .build()
-        var lastFailure: ProviderFailure? = null
+        var lastFailure: ProviderFailureException? = null
         for (url in urls) {
             try {
                 val http = url + "/search?q=" + URLEncoder.encode(query, "UTF-8") + "&format=json"
                 val results = searchClient.newCall(Request.Builder().url(http).build())
                     .execute().use { r ->
                         if (!r.isSuccessful) {
-                            throw ProviderFailure(engine, IllegalStateException("HTTP ${r.code}"))
+                            throw ProviderFailureException(engine, cause = IllegalStateException("HTTP ${r.code}"))
                         }
                         val body = r.body?.string()
-                            ?: throw ProviderFailure(engine, IllegalStateException("empty body"))
+                            ?: throw ProviderFailureException(engine, cause = IllegalStateException("empty body"))
                         json.decodeFromString<SearxngResponse>(body)
                             .results
                             .take(limit)
@@ -55,10 +55,10 @@ class SearXngProvider(
                     }
                 return@withContext results
             } catch (e: Exception) {
-                lastFailure = ProviderFailure(engine, e)
+                lastFailure = ProviderFailureException(engine, cause = e)
             }
         }
-        throw lastFailure ?: ProviderFailure(engine, IllegalStateException("no urls attempted"))
+        throw lastFailure ?: ProviderFailureException(engine, cause = IllegalStateException("no urls attempted"))
     }
 
     companion object {

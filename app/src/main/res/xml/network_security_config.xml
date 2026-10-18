@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spec §8.5 HTTPS-first: cleartext permitted ONLY for user-approved local
+     SearXNG endpoints. Everything else must be https. Custom non-default
+     http endpoints require editing this file (documented in LIMITATIONS). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">100.110.99.98</domain>
+        <domain includeSubdomains="false">192.168.31.65</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

@@ -3,29 +3,77 @@ package dev.elyssia.iris.browser
 import android.webkit.CookieManager
 import android.webkit.WebSettings
 import android.webkit.WebView
+import androidx.webkit.Profile
+import androidx.webkit.ProfileStore
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 
 object PrivacyWebView {
     val DNT_HEADERS: Map<String, String> = mapOf("DNT" to "1")
 
-    fun configure(wv: WebView, incognito: Boolean) {
+    const val PRIVATE_PROFILE = "iris-private"
+
+    /**
+     * Spec §8.3 "Prefer isolated WebView profiles through AndroidX WebKit
+     * feature detection": report whether genuine private isolation (separate
+     * cookie/site-storage profile) is available on the installed WebView.
+     */
+    fun supportsPrivateIsolation(): Boolean =
+        WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)
+
+    private fun privateProfile(): Profile? = try {
+        if (supportsPrivateIsolation()) {
+            ProfileStore.getInstance().getOrCreateProfile(PRIVATE_PROFILE)
+        } else {
+            null
+        }
+    } catch (_: UnsupportedOperationException) {
+        null
+    }
+
+    fun configure(wv: WebView, isPrivate: Boolean) {
         wv.settings.apply {
             javaScriptEnabled = true
-            domStorageEnabled = !incognito
+            domStorageEnabled = true
             databaseEnabled = false
-            cacheMode = if (incognito) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_DEFAULT
+            cacheMode = if (isPrivate) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_DEFAULT
         }
-        CookieManager.getInstance().setAcceptThirdPartyCookies(wv, false)
+        if (isPrivate) {
+            try {
+                if (supportsPrivateIsolation()) {
+                    WebViewCompat.setProfile(wv, PRIVATE_PROFILE)
+                }
+            } catch (_: UnsupportedOperationException) { /* degrade; caller labels UI honestly */ }
+        } else {
+            CookieManager.getInstance().setAcceptThirdPartyCookies(wv, false)
+        }
+    }
+
+    fun setAcceptThirdPartyCookies(wv: WebView, accept: Boolean) {
+        CookieManager.getInstance().setAcceptThirdPartyCookies(wv, accept)
     }
 
     fun load(wv: WebView, url: String) = wv.loadUrl(url, DNT_HEADERS)
 
-    fun clearAll(wv: WebView, incognito: Boolean) {
+    /** Load attempt for a private tab — same DNT headers. */
+    fun clearPrivate(wv: WebView) {
+        // Only the isolated view: page-level artifacts. The enclosing profile's
+        // cookies are dropped with the profile itself when the last private
+        // tab closes (see TabHost), never touching normal-mode cookies.
         wv.apply {
             clearCache(true)
             clearFormData()
             clearSslPreferences()
+            clearHistory()
         }
-        CookieManager.getInstance().removeAllCookies(null)
-        CookieManager.getInstance().flush()
+    }
+
+    /** Delete the isolated private profile. Requires zero live private WebViews. */
+    fun deletePrivateProfile() {
+        try {
+            if (supportsPrivateIsolation()) {
+                ProfileStore.getInstance().deleteProfile(PRIVATE_PROFILE)
+            }
+        } catch (_: Exception) { /* deletion may be async/unsupported; documented */ }
     }
 }

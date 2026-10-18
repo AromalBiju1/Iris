@@ -15,7 +15,7 @@ class SearchRouterTest {
         override val engine = engine
         override suspend fun probe(timeoutMs: Long) = probeResult
         override suspend fun search(query: String, limit: Int): List<SearchResult> {
-            if (throwOnSearch) throw ProviderFailure(engine, IllegalStateException("boom"))
+            if (throwOnSearch) throw ProviderFailureException(engine, cause = IllegalStateException("boom"))
             return results
         }
     }
@@ -68,7 +68,7 @@ class SearchRouterTest {
             router.search("q")
             throw AssertionError("expected NoResultsException")
         } catch (e: NoResultsException) {
-            assertEquals(2, e.errors.size)
+            assertEquals(2, e.failures.size)
         }
     }
 
@@ -80,7 +80,7 @@ class SearchRouterTest {
             override suspend fun probe(timeoutMs: Long) = true
             override suspend fun search(query: String, limit: Int): List<SearchResult> {
                 calls++
-                throw ProviderFailure(engine, IllegalStateException("broken"))
+                throw ProviderFailureException(engine, cause = IllegalStateException("broken"))
             }
         }
         val router = SearchRouter(listOf(
@@ -99,7 +99,7 @@ class SearchRouterTest {
             override val engine = Engine.SEARXNG
             override suspend fun probe(timeoutMs: Long): Boolean { probes++; return false }
             override suspend fun search(query: String, limit: Int): List<SearchResult> {
-                throw ProviderFailure(engine, IllegalStateException("should not be reached"))
+                throw ProviderFailureException(engine, cause = IllegalStateException("should not be reached"))
             }
         }
         val router = SearchRouter(listOf(

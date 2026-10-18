@@ -6,6 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -14,13 +15,14 @@ import dev.elyssia.iris.browser.BrowserScreen
 import dev.elyssia.iris.search.SearchViewModel
 import dev.elyssia.iris.search.UrlDetector
 import dev.elyssia.iris.storage.LocalStore
+import dev.elyssia.iris.ui.IrisTheme
 import dev.elyssia.iris.ui.SearchScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val store = LocalStore(applicationContext)
-        setContent { AppRoot(store) }
+        setContent { IrisTheme { AppRoot(store) } }
     }
 }
 
@@ -30,30 +32,41 @@ fun AppRoot(store: LocalStore) {
     val state by vm.uiState.collectAsState()
     var browsingUrl: String? by remember { mutableStateOf<String?>(null) }
     var incognito: Boolean by remember { mutableStateOf(false) }
+    var searchKey by remember { mutableStateOf(0) }
     val currentUrl = browsingUrl
     if (currentUrl == null) {
-        SearchScreen(
-            uiState = state,
-            onQuerySubmit = {
-                val url = UrlDetector.detect(it)
-                if (url != null) browsingUrl = url else vm.submit(it)
-            },
-            onOpenUrl = { browsingUrl = it },
-        )
+        // key: refresh collections after browsing (star saves)
+        key(searchKey) {
+            SearchScreen(
+                store = store,
+                uiState = state,
+                onQuerySubmit = {
+                    val url = UrlDetector.detect(it)
+                    if (url != null) browsingUrl = url else vm.submit(it)
+                },
+                onOpenUrl = { browsingUrl = it },
+            )
+        }
     } else {
         BrowserScreen(
             initialUrl = currentUrl,
             incognito = incognito,
-            onExit = { browsingUrl = null },
+            onIncognitoChange = { incognito = it },
+            onExit = {
+                browsingUrl = null
+                searchKey++
+            },
             onUrlRequested = { text ->
                 val url = UrlDetector.detect(text)
                 if (url != null) {
                     browsingUrl = url
                 } else {
                     browsingUrl = null
+                    searchKey++
                     vm.submit(text)
                 }
             },
+            store = store,
         )
     }
 }

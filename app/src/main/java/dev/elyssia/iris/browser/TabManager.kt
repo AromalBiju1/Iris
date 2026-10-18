@@ -1,7 +1,9 @@
 package dev.elyssia.iris.browser
 
+import androidx.compose.runtime.mutableStateListOf
+
 class TabManager {
-    private val _tabs = mutableListOf<TabState>()
+    private val _tabs = mutableStateListOf<TabState>()
     val tabs: List<TabState> get() = _tabs.toList()
     private var counter = 0
     private var activeIndex = -1

@@ -41,7 +41,7 @@ class SearXngProvider(
         for (url in urls) {
             try {
                 val http = url + "/search?q=" + URLEncoder.encode(query, "UTF-8") + "&format=json"
-                searchClient.newCall(Request.Builder().url(http).build())
+                val results = searchClient.newCall(Request.Builder().url(http).build())
                     .execute().use { r ->
                         if (!r.isSuccessful) {
                             throw ProviderFailure(engine, IllegalStateException("HTTP ${r.code}"))
@@ -53,6 +53,7 @@ class SearXngProvider(
                             .take(limit)
                             .map { it.toSearchResult() }
                     }
+                return@withContext results
             } catch (e: Exception) {
                 lastFailure = ProviderFailure(engine, e)
             }

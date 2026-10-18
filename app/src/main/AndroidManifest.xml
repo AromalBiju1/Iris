@@ -4,6 +4,7 @@
     <application
         android:label="Iris"
         android:icon="@android:drawable/ic_menu_manage"
+        android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>

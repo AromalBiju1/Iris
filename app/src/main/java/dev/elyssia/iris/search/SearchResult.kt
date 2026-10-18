@@ -18,4 +18,7 @@ class ProviderFailure(
 
 class NoResultsException(
     val errors: List<Throwable>,
-) : Exception("all providers failed (${errors.size} errors)")
+) : Exception(
+    "all providers failed (${errors.size} errors): " +
+        errors.joinToString(" | ") { "${it::class.simpleName}: ${it.message}" }
+)

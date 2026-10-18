@@ -30,11 +30,31 @@ class DdgLiteProvider(private val client: OkHttpClient) : SearchProvider {
                     }
                     val body = r.body?.string()
                         ?: throw ProviderFailureException(engine, cause = IllegalStateException("empty body"))
-                    DdgLiteParser.parse(body, limit)
+                    val results = DdgLiteParser.parse(body, limit)
+                    // A challenge page parses as zero results — classify it as a
+                    // failure, never as "no results found" (spec §5.2).
+                    if (results.isEmpty() && looksLikeBotChallenge(body)) {
+                        throw ProviderFailureException(
+                            engine,
+                            cause = IllegalStateException("blocked by bot challenge"),
+                        )
+                    }
+                    results
                 }
         } catch (e: Exception) {
             throw ProviderFailureException(engine, cause = e)
         }
+    }
+
+    private fun looksLikeBotChallenge(html: String): Boolean {
+        val lower = html.lowercase()
+        return listOf(
+            "unusual traffic",
+            "are you a robot",
+            "verify you are",
+            "/sorry/",
+            "anomaly",
+        ).any { it in lower }
     }
 
     companion object {

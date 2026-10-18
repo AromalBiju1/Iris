@@ -2,6 +2,7 @@ package dev.elyssia.iris.browser
 
 import android.app.Activity
 import android.content.Context
+import android.widget.Toast
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -234,16 +235,25 @@ fun BrowserScreen(
                         )
                         DropdownMenuItem(text = { Text("Save to collections") }, onClick = {
                             menuOpen = false
-                            val u = wv?.url ?: return@DropdownMenuItem
-                            store.upsertBookmark(u, tabs.titleFor(tabs.active() ?: return@DropdownMenuItem))
-                        })
-                        DropdownMenuItem(text = { Text("Share page") }, enabled = wv?.url != null, onClick = {
-                            menuOpen = false
-                            val share = Intent(Intent.ACTION_SEND).apply {
-                                type = "text/plain"
-                                putExtra(Intent.EXTRA_TEXT, wv?.url)
+                            val u = wv?.url
+                            if (u == null) {
+                                Toast.makeText(context, "Open a page first", Toast.LENGTH_SHORT).show()
+                            } else {
+                                store.upsertBookmark(u, tabs.titleFor(tabs.active() ?: return@DropdownMenuItem))
                             }
-                            context.startActivity(Intent.createChooser(share, "Share via"))
+                        })
+                        DropdownMenuItem(text = { Text("Share page") }, onClick = {
+                            menuOpen = false
+                            val url = wv?.url
+                            if (url == null) {
+                                Toast.makeText(context, "Open a page first", Toast.LENGTH_SHORT).show()
+                            } else {
+                                val share = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, url)
+                                }
+                                context.startActivity(Intent.createChooser(share, "Share via"))
+                            }
                         })
                         DropdownMenuItem(text = { Text("Settings") }, onClick = {
                             menuOpen = false

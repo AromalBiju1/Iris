@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
@@ -40,20 +43,32 @@ fun SearchScreen(
     onOpenUrl: (String) -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
-    Column(Modifier.fillMaxSize().padding(12.dp)) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 16.dp)) {
+        Text(
+            "Iris",
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(16.dp))
         OutlinedTextField(
             value = text,
             onValueChange = { text = it },
             placeholder = { Text("Search privately…") },
             singleLine = true,
+            shape = MaterialTheme.shapes.extraLarge,
             modifier = Modifier.fillMaxWidth(),
         )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
         Button(
             onClick = { onQuerySubmit(text); text = "" },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().height(52.dp),
         ) { Text("Search") }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
         when (val state = uiState) {
             is SearchUiState.Idle -> {}
             is SearchUiState.Loading -> LinearProgressIndicator(Modifier.fillMaxWidth())

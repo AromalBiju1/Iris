@@ -1,5 +1,8 @@
 package dev.elyssia.iris.browser
 
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.layout.size
 import android.app.Activity
 import android.content.Context
 import android.widget.Toast
@@ -22,6 +25,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -79,6 +84,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import dev.elyssia.iris.R
 import dev.elyssia.iris.storage.LocalStore
 
 private const val MAX_ACTIVE_WEBVIEWS = 3
@@ -221,6 +227,22 @@ fun BrowserScreen(
         Column {
             // ---- web content: one lazy WebView per tab within the active limit ----
             Box(Modifier.fillMaxWidth().weight(1f)) {
+                val activeTabN = tabs.tabs.firstOrNull { it.id == activeId }
+                if (activeTabN?.url == null) {
+                    NewTabOverlay(
+                        isPrivate = activeTabN?.isPrivate == true,
+                        onOpen = { url ->
+                            val wv0 = holders[activeId]
+                            val t0 = tabs.tabs.firstOrNull { it.id == activeId }
+                            if (wv0 != null && t0 != null) {
+                                PrivacyWebView.load(wv0, url)
+                                tabs.openedUrl(t0, url)
+                                if (url.contains("youtube.com", true)) wv0.settings.userAgentString = DESKTOP_UA
+                                persistSession(tabs, store)
+                            }
+                        },
+                    )
+                }
                 if (!online) {
                     OfflineBanner(
                         onRetry = { holders[activeId]?.reload() },
@@ -228,6 +250,8 @@ fun BrowserScreen(
                     )
                 }
                 holders.forEach { (id, wv) ->
+                    val t = tabs.tabs.firstOrNull { it.id == id }
+                    if (t?.url == null) return@forEach
                     val isActive = id == activeId
                     if (isActive) {
                         AndroidView(
@@ -246,9 +270,12 @@ fun BrowserScreen(
                 }
             }
 
-            // ---- nav row (§6.2): ◀ ▶ ⟳ Tabs ⋮ ----
+            // ---- single browser bar (Brave-style): ◀ ▶ ⟳ [pill] shields tabs ⋮ ----
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 2.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val wv = holders[activeId]
@@ -262,25 +289,44 @@ fun BrowserScreen(
                 IconButton(onClick = { if (loading) wv?.stopLoading() else wv?.reload() }) {
                     if (loading) Icon(Icons.Filled.Close, "stop") else Icon(Icons.Filled.Refresh, "reload")
                 }
-
+                OutlinedTextField(
+                    value = urlBar,
+                    onValueChange = { urlBar = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 4.dp),
+                    singleLine = true,
+                    shape = RoundedCornerShape(24.dp),
+                    placeholder = { Text("Search or enter address", maxLines = 1) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+                    keyboardActions = KeyboardActions(onGo = { onUrlRequested(urlBar) }),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    ),
+                )
                 IconButton(onClick = { drawerOpen = true }) {
                     BadgedBox(
                         badge = { if (tabs.tabs.size > 1) Badge { Text(tabs.tabs.size.toString()) } },
-                    ) { Icon(Icons.Filled.Menu, "tabs") }
-                }
-                Spacer(Modifier.weight(1f))
-                if ((blockedCounts[activeId] ?: 0) > 0) {
-                    Text(
-                        "${blockedCounts[activeId]} blocked",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Filled.Menu, "tabs")
+                            if ((blockedCounts[activeId] ?: 0) > 0) {
+                                Text(
+                                    "${blockedCounts[activeId]}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                    }
                 }
                 Box {
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "menu") }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
+DropdownMenuItem(
                             text = { Text("New tab") },
                             onClick = {
                                 menuOpen = false
@@ -336,27 +382,6 @@ fun BrowserScreen(
                     }
                 }
             }
-
-            // ---- address row (§6.2 second row) ----
-            OutlinedTextField(
-                value = urlBar,
-                onValueChange = { urlBar = it },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                    .navigationBarsPadding(),
-                singleLine = true,
-                shape = RoundedCornerShape(26.dp),
-                placeholder = { Text("Search or enter address", maxLines = 1) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
-                keyboardActions = KeyboardActions(onGo = { onUrlRequested(urlBar) }),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = Color.Transparent,
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            )
         }
 
         // ---- right-side tab rail ----
@@ -514,6 +539,14 @@ private fun ensureWebView(
     wv.webViewClient = object : WebViewClient() {
         override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
             if (url == null) return
+            if (url.contains("youtube.com", ignoreCase = true) &&
+                view.settings.userAgentString != DESKTOP_UA) {
+                // desktop classification: keeps the full-width player (mobile
+                // WebView UA renders a broken ~20%-screen player)
+                view.settings.userAgentString = DESKTOP_UA
+                view.reload()
+                return
+            }
             val current = tabs.tabs.firstOrNull { it.id == tab.id } ?: return
             tabs.openedUrl(current, url)
             loadingIds[current.id] = true
@@ -562,6 +595,58 @@ private fun ensureWebView(
 
 const val DESKTOP_UA =
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+@Composable
+private fun NewTabOverlay(isPrivate: Boolean, onOpen: (String) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Spacer(Modifier.weight(1f))
+        Image(
+            painter = painterResource(R.drawable.logo),
+            contentDescription = null,
+            modifier = Modifier.size(110.dp),
+        )
+        Text(
+            if (isPrivate) "Private tab" else "New tab",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+        Text(
+            if (isPrivate) "Nothing here is saved to history." else "Search or type an address in the bar below",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        Spacer(Modifier.height(24.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            listOf(
+                "YouTube" to "https://m.youtube.com",
+                "Wiki" to "https://en.m.wikipedia.org",
+                "GitHub" to "https://github.com",
+            ).forEach { (label, url) ->
+                Surface(
+                    onClick = { onOpen(url) },
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 9.dp),
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+    }
+}
 
 @Composable
 private fun TabRow(

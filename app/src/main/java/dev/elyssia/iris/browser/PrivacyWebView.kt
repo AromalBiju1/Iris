@@ -41,6 +41,8 @@ object PrivacyWebView {
             useWideViewPort = true
             loadWithOverviewMode = true
         }
+        // blank regions match the theme instead of a black/white void
+        wv.setBackgroundColor(if (dark) 0xFF14121F.toInt() else 0xFFFFFFFF.toInt())
         applyDarkMode(wv, dark)
         if (isPrivate) {
             try {

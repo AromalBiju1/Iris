@@ -5,11 +5,21 @@ import android.content.Context
 import android.widget.Toast
 import android.content.Intent
 import android.net.ConnectivityManager
+import android.view.View
+import android.content.pm.ActivityInfo
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import java.io.ByteArrayInputStream
 import android.net.NetworkCapabilities
 import android.webkit.CookieManager
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -102,7 +112,30 @@ fun BrowserScreen(
     var confirmClear by remember { mutableStateOf(false) }
     var urlBar by remember { mutableStateOf("") }
     var online by remember { mutableStateOf(true) }
+    val dark = isSystemInDarkTheme()
+    val blockedCounts = remember { mutableStateMapOf<Int, Int>() }
+    var fullScreenView by remember { mutableStateOf<View?>(null) }
+    var fullScreenCallback by remember { mutableStateOf<android.webkit.WebChromeClient.CustomViewCallback?>(null) }
+    var preFullscreenOrientation by remember { mutableStateOf(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED) }
     val context = LocalContext.current
+
+    // --- fullscreen video (WebChromeClient custom view) → immersive + rotate ---
+    fun exitFullscreen() {
+        val activity = context as? Activity
+        if (activity != null) {
+            WindowCompat.setDecorFitsSystemWindows(activity.window, true)
+            WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+                .show(WindowInsetsCompat.Type.systemBars())
+            activity.requestedOrientation = preFullscreenOrientation
+        }
+        fullScreenCallback?.onCustomViewHidden()
+        fullScreenView = null
+        fullScreenCallback = null
+    }
+
+    LaunchedEffect(dark) {
+        holders.values.forEach { PrivacyWebView.applyDarkMode(it, dark) }
+    }
 
     // --- session restore (§16 TabSession); private tabs are never restored ---
     LaunchedEffect(Unit) {
@@ -121,16 +154,46 @@ fun BrowserScreen(
             tabs = tabs,
             holders = holders,
             loadingIds = loadingIds,
+            blockedCounts = blockedCounts,
             context = context,
             store = store,
+            dark = dark,
             onUrlChange = { if (it.id == activeId) urlBar = it.url ?: urlBar },
+            onShowFullscreen = { view, cb ->
+                val activity = context as? Activity
+                if (activity != null) {
+                    preFullscreenOrientation = activity.requestedOrientation
+                    activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    WindowCompat.setDecorFitsSystemWindows(activity.window, false)
+                    val c = WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+                    c.hide(WindowInsetsCompat.Type.systemBars())
+                    c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                }
+                fullScreenCallback = cb
+                fullScreenView = view
+            },
+            onHideFullscreen = {
+                fullScreenView = null
+                fullScreenCallback = null
+                val activity = context as? Activity
+                if (activity != null) {
+                    WindowCompat.setDecorFitsSystemWindows(activity.window, true)
+                    WindowInsetsControllerCompat(activity.window, activity.window.decorView)
+                        .show(WindowInsetsCompat.Type.systemBars())
+                    activity.requestedOrientation = preFullscreenOrientation
+                }
+            },
         )
     }
 
-    // system back: pop web history first, then back to search
+    // system back: leave fullscreen video first, then web history, then search
     BackHandler {
-        val wv = holders[activeId]
-        if (wv != null && wv.canGoBack()) wv.goBack() else onExit()
+        if (fullScreenView != null) {
+            exitFullscreen()
+        } else {
+            val wv = holders[activeId]
+            if (wv != null && wv.canGoBack()) wv.goBack() else onExit()
+        }
     }
 
     fun clearDataOnExit() {
@@ -206,7 +269,14 @@ fun BrowserScreen(
                     ) { Icon(Icons.Filled.Menu, "tabs") }
                 }
                 Spacer(Modifier.weight(1f))
-                IconButton(onExit) { Icon(Icons.Filled.Home, "Iris home") }
+                if ((blockedCounts[activeId] ?: 0) > 0) {
+                    Text(
+                        "${blockedCounts[activeId]} blocked",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
+                }
                 Box {
                     IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "menu") }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -372,11 +442,17 @@ fun BrowserScreen(
                 },
             )
         }
+
+        // ---- fullscreen video render surface (topmost child of root Box) ----
+        fullScreenView?.let { fs ->
+            AndroidView(factory = { fs }, modifier = Modifier.fillMaxSize())
+        }
     }
 
     // ---- app exit: destroy all WebViews; private profile deletion (§8.3) ----
     DisposableEffect(Unit) {
         onDispose {
+            exitFullscreen()
             val privateTabs = tabs.tabs.filter { it.isPrivate }
             privateTabs.forEach { t ->
                 holders[t.id]?.let { wv ->
@@ -411,9 +487,13 @@ private fun ensureWebView(
     tabs: TabManager,
     holders: MutableMap<Int, WebView>,
     loadingIds: MutableMap<Int, Boolean>,
+    blockedCounts: MutableMap<Int, Int>,
     context: Context,
     store: LocalStore,
+    dark: Boolean,
     onUrlChange: (TabState) -> Unit,
+    onShowFullscreen: (View, android.webkit.WebChromeClient.CustomViewCallback) -> Unit,
+    onHideFullscreen: () -> Unit,
 ) {
     if (holders.containsKey(tab.id)) return
     while (holders.size >= MAX_ACTIVE_WEBVIEWS) {
@@ -424,7 +504,13 @@ private fun ensureWebView(
         loadingIds.remove(victim)
     }
     val wv = WebView(context)
-    PrivacyWebView.configure(wv, tab.isPrivate)
+    PrivacyWebView.configure(wv, tab.isPrivate, dark)
+    // YouTube serves a broken/portrait-player layout to WebView mobile UAs;
+    // desktop classification restores the normal full-width player
+    if (tab.url?.contains("youtube.com", ignoreCase = true) == true) {
+        wv.settings.userAgentString = DESKTOP_UA
+    }
+    blockedCounts[tab.id] = 0
     wv.webViewClient = object : WebViewClient() {
         override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
             if (url == null) return
@@ -434,6 +520,17 @@ private fun ensureWebView(
             onUrlChange(TabState(current.id, url, current.title, current.isPrivate))
             persistSession(tabs, store)
         }
+
+        override fun shouldInterceptRequest(
+            view: WebView,
+            request: WebResourceRequest,
+        ): WebResourceResponse? =
+            if (AdBlocker.shouldBlock(request.url.toString())) {
+                blockedCounts[tab.id] = (blockedCounts[tab.id] ?: 0) + 1
+                WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
+            } else {
+                null
+            }
 
         override fun onPageFinished(view: WebView, url: String?) {
             loadingIds[tab.id] = false
@@ -450,9 +547,21 @@ private fun ensureWebView(
             persistSession(tabs, store)
         }
     }
+    wv.webChromeClient = object : WebChromeClient() {
+        override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+            onShowFullscreen(view, callback)
+        }
+
+        override fun onHideCustomView() {
+            onHideFullscreen()
+        }
+    }
     if (tab.url != null) PrivacyWebView.load(wv, tab.url)
     holders[tab.id] = wv
 }
+
+const val DESKTOP_UA =
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
 @Composable
 private fun TabRow(

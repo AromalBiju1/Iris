@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.elyssia.iris.browser.AdBlocker
 import dev.elyssia.iris.browser.CookieCleaner
 import dev.elyssia.iris.browser.PrivacyWebView
 import dev.elyssia.iris.search.SearchSettings
@@ -115,7 +116,8 @@ fun SettingsScreen(store: LocalStore, onBack: () -> Unit) {
         Text("About", style = MaterialTheme.typography.titleMedium)
         Text(
             "Iris — privacy-first hybrid browser. No accounts, no telemetry, no ad SDKs. " +
-                "Search runs on your own SearXNG first.",
+                "Search runs on your own SearXNG first. Built-in ad/tracker blocking: " +
+                AdBlocker.rulesCount() + " rules, applied per page load.",
             style = MaterialTheme.typography.bodyMedium,
         )
     }

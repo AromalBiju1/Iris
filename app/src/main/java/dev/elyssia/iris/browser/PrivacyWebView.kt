@@ -5,6 +5,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.webkit.Profile
 import androidx.webkit.ProfileStore
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 
@@ -31,13 +32,16 @@ object PrivacyWebView {
         null
     }
 
-    fun configure(wv: WebView, isPrivate: Boolean) {
+    fun configure(wv: WebView, isPrivate: Boolean, dark: Boolean = false) {
         wv.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
             databaseEnabled = false
             cacheMode = if (isPrivate) WebSettings.LOAD_NO_CACHE else WebSettings.LOAD_DEFAULT
+            useWideViewPort = true
+            loadWithOverviewMode = true
         }
+        applyDarkMode(wv, dark)
         if (isPrivate) {
             try {
                 if (supportsPrivateIsolation()) {
@@ -47,6 +51,15 @@ object PrivacyWebView {
         } else {
             CookieManager.getInstance().setAcceptThirdPartyCookies(wv, false)
         }
+    }
+
+    /** Match in-app dark theme for page rendering (WebView 105+, API 29+). */
+    fun applyDarkMode(wv: WebView, dark: Boolean) {
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                WebSettingsCompat.setAlgorithmicDarkeningAllowed(wv.settings, dark)
+            }
+        } catch (_: Throwable) { /* older WebView engines keep site themes */ }
     }
 
     fun setAcceptThirdPartyCookies(wv: WebView, accept: Boolean) {
